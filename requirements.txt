@@ -1,0 +1,27 @@
+# ── Core web framework ────────────────────────────────────────────────────────
+Flask==3.0.3
+Flask-Cors==4.0.1
+Flask-SQLAlchemy==3.1.1
+
+# ── Environment / config ──────────────────────────────────────────────────────
+python-dotenv==1.0.1
+
+# ── IBM watsonx.ai SDK (Granite model) ────────────────────────────────────────
+ibm-watsonx-ai>=1.1.2
+
+# ── RAG / vector stores (choose one; both listed for flexibility) ─────────────
+chromadb>=0.5.0
+# faiss-cpu>=1.8.0       # Alternative: uncomment and comment out chromadb line
+
+# ── Embeddings (local, no API key needed) ─────────────────────────────────────
+sentence-transformers>=3.0.0
+
+# ── Academic paper APIs ───────────────────────────────────────────────────────
+arxiv>=2.1.0
+requests>=2.31.0
+
+# ── Database ──────────────────────────────────────────────────────────────────
+SQLAlchemy>=2.0.0
+
+# ── Utilities ─────────────────────────────────────────────────────────────────
+numpy>=1.26.0

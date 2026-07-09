@@ -1,0 +1,225 @@
+{% extends "base.html" %}
+{% block title %}AI Chat — ResearchAI{% endblock %}
+
+{% block content %}
+<div class="page-header d-flex align-items-center justify-content-between flex-wrap gap-2">
+  <div>
+    <h1 class="page-title"><i class="bi bi-chat-dots-fill me-2 accent"></i>AI Research Chat</h1>
+    <p class="page-subtitle">Ask research questions. Granite answers using your library as context.</p>
+  </div>
+  <button class="btn btn-outline-secondary btn-sm" id="clearChatBtn">
+    <i class="bi bi-trash me-1"></i>Clear Chat
+  </button>
+</div>
+
+<div class="chat-layout">
+  <!-- Chat messages area -->
+  <div class="chat-messages" id="chatMessages">
+    <div class="chat-welcome" id="chatWelcome">
+      <div class="welcome-icon"><i class="bi bi-cpu-fill"></i></div>
+      <h3>Hello, Researcher!</h3>
+      <p>I'm your IBM Granite-powered assistant. Ask me anything about your saved papers, or a general research topic.</p>
+      <div class="suggested-prompts">
+        <p class="prompt-label">Try asking:</p>
+        <button class="suggested-btn" onclick="setPrompt(this)">What are the key findings in my saved papers?</button>
+        <button class="suggested-btn" onclick="setPrompt(this)">Explain transformer attention mechanisms</button>
+        <button class="suggested-btn" onclick="setPrompt(this)">What are current research gaps in LLM alignment?</button>
+        <button class="suggested-btn" onclick="setPrompt(this)">Compare BERT and GPT architectures</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Input area -->
+  <div class="chat-input-area">
+    <div class="chat-input-wrapper">
+      <textarea
+        id="chatInput"
+        class="chat-textarea"
+        placeholder="Ask a research question…"
+        rows="1"
+      ></textarea>
+      <button class="chat-send-btn" id="chatSendBtn" title="Send">
+        <i class="bi bi-send-fill"></i>
+      </button>
+    </div>
+    <div class="chat-input-footer">
+      <span class="input-hint"><i class="bi bi-lightning-fill me-1"></i>Powered by IBM Granite · Answers grounded in your library</span>
+      <span class="input-hint">Press <kbd>Ctrl</kbd>+<kbd>Enter</kbd> to send</span>
+    </div>
+  </div>
+</div>
+
+<script>
+let sessionId = localStorage.getItem('chatSessionId') || null;
+
+function setPrompt(btn) {
+  document.getElementById('chatInput').value = btn.textContent;
+  document.getElementById('chatInput').focus();
+}
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 160) + 'px';
+}
+
+function escapeHtml(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function renderMarkdown(text) {
+  return text
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/^### (.+)$/gm, '<h5 class="mt-2 mb-1">$1</h5>')
+    .replace(/^## (.+)$/gm, '<h4 class="mt-2 mb-1">$1</h4>')
+    .replace(/^# (.+)$/gm, '<h3 class="mt-2 mb-1">$1</h3>')
+    .replace(/^\s*[-•]\s+(.+)$/gm, '<li>$1</li>')
+    .replace(/(<li>[\s\S]*?<\/li>)/g, '<ul>$1</ul>')
+    .replace(/\n{2,}/g, '</p><p>')
+    .replace(/\n/g, '<br>');
+}
+
+function appendMessage(role, content, sources) {
+  const welcome = document.getElementById('chatWelcome');
+  if (welcome) welcome.remove();
+
+  const msgs = document.getElementById('chatMessages');
+  const div = document.createElement('div');
+  div.className = `chat-msg chat-msg-${role}`;
+
+  const bubble = document.createElement('div');
+  bubble.className = 'chat-bubble';
+
+  if (role === 'assistant') {
+    bubble.innerHTML = `<p>${renderMarkdown(escapeHtml(content))}</p>`;
+    if (sources && sources.length > 0) {
+      const sourcesHtml = sources.map((s,i) =>
+        `<div class="source-chip" title="${escapeHtml(s.text)}">
+           <i class="bi bi-journal-text me-1"></i>
+           <strong>${escapeHtml(s.title || 'Source ' + (i+1))}</strong>
+           ${s.authors ? ' · ' + escapeHtml(s.authors.split(',')[0]) : ''}
+           ${s.year ? ', ' + s.year : ''}
+         </div>`
+      ).join('');
+      bubble.innerHTML += `<div class="sources-section"><div class="sources-label"><i class="bi bi-link-45deg"></i> Sources</div><div class="sources-chips">${sourcesHtml}</div></div>`;
+    }
+  } else {
+    bubble.textContent = content;
+  }
+
+  const avatar = document.createElement('div');
+  avatar.className = 'chat-avatar';
+  avatar.innerHTML = role === 'user'
+    ? '<i class="bi bi-person-fill"></i>'
+    : '<i class="bi bi-cpu-fill"></i>';
+
+  if (role === 'user') {
+    div.appendChild(bubble);
+    div.appendChild(avatar);
+  } else {
+    div.appendChild(avatar);
+    div.appendChild(bubble);
+  }
+
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function appendTyping() {
+  const welcome = document.getElementById('chatWelcome');
+  if (welcome) welcome.remove();
+
+  const msgs = document.getElementById('chatMessages');
+  const div = document.createElement('div');
+  div.className = 'chat-msg chat-msg-assistant';
+  div.id = 'typingIndicator';
+  div.innerHTML = `
+    <div class="chat-avatar"><i class="bi bi-cpu-fill"></i></div>
+    <div class="chat-bubble typing-bubble">
+      <span class="typing-dot"></span>
+      <span class="typing-dot"></span>
+      <span class="typing-dot"></span>
+    </div>`;
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function removeTyping() {
+  const el = document.getElementById('typingIndicator');
+  if (el) el.remove();
+}
+
+async function sendMessage() {
+  const input = document.getElementById('chatInput');
+  const msg = input.value.trim();
+  if (!msg) return;
+
+  input.value = '';
+  input.style.height = 'auto';
+  document.getElementById('chatSendBtn').disabled = true;
+
+  appendMessage('user', msg);
+  appendTyping();
+
+  try {
+    const resp = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: msg, session_id: sessionId }),
+    });
+    const data = await resp.json();
+    removeTyping();
+    if (resp.ok) {
+      sessionId = data.session_id;
+      localStorage.setItem('chatSessionId', sessionId);
+      appendMessage('assistant', data.answer, data.sources);
+    } else {
+      appendMessage('assistant', `⚠️ Error: ${data.error || 'Unknown error'}`, []);
+    }
+  } catch (e) {
+    removeTyping();
+    appendMessage('assistant', '⚠️ Network error. Please check your connection.', []);
+  }
+
+  document.getElementById('chatSendBtn').disabled = false;
+  input.focus();
+}
+
+// Load history on page load
+async function loadHistory() {
+  if (!sessionId) return;
+  try {
+    const resp = await fetch(`/api/chat/history?session_id=${sessionId}`);
+    const data = await resp.json();
+    if (data.messages && data.messages.length > 0) {
+      data.messages.forEach(m => {
+        appendMessage(m.role, m.content, m.sources || []);
+      });
+    }
+  } catch(e) {}
+}
+
+document.getElementById('chatSendBtn').addEventListener('click', sendMessage);
+document.getElementById('chatInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sendMessage(); }
+  autoResize(e.target);
+});
+document.getElementById('chatInput').addEventListener('input', e => autoResize(e.target));
+
+document.getElementById('clearChatBtn').addEventListener('click', async () => {
+  if (!confirm('Clear chat history?')) return;
+  await fetch('/api/chat/clear', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ session_id: sessionId }),
+  });
+  document.getElementById('chatMessages').innerHTML = '';
+  localStorage.removeItem('chatSessionId');
+  sessionId = null;
+  location.reload();
+});
+
+loadHistory();
+</script>
+{% endblock %}
