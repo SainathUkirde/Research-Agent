@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+{% block title %}Draft Section — ResearchAI{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title"><i class="bi bi-file-earmark-text-fill me-2 accent"></i>Draft Section</h1>
+  <p class="page-subtitle">Select saved papers and let Granite draft a paper section with citations.</p>
+</div>
+
+<div class="row g-4">
+  <!-- Controls panel -->
+  <div class="col-lg-4">
+    <div class="panel-card">
+      <h5 class="panel-card-title"><i class="bi bi-gear-fill me-2"></i>Draft Settings</h5>
+
+      <div class="mb-3">
+        <label class="form-label">Research Topic / Title</label>
+        <input type="text" class="form-control form-control-sm" id="draftTopic"
+               placeholder="e.g. Large Language Models for scientific reasoning" />
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">Section Type</label>
+        <select class="form-select form-select-sm" id="draftSection">
+          <option value="introduction">Introduction</option>
+          <option value="related_work" selected>Related Work</option>
+          <option value="methodology">Methodology</option>
+          <option value="conclusion">Conclusion</option>
+        </select>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">Citation Style</label>
+        <select class="form-select form-select-sm" id="draftCiteStyle">
+          <option value="APA" selected>APA</option>
+          <option value="MLA">MLA</option>
+          <option value="IEEE">IEEE</option>
+        </select>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label">Extra Instructions <span class="text-muted small">(optional)</span></label>
+        <textarea class="form-control form-control-sm" id="draftInstructions" rows="2"
+                  placeholder="e.g. Focus on transformer-based models only…"></textarea>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label d-flex align-items-center justify-content-between">
+          Selected Papers
+          <button class="btn btn-link btn-sm p-0" onclick="loadLibraryPapers()">
+            <i class="bi bi-arrow-clockwise"></i> Reload
+          </button>
+        </label>
+        <div id="paperPickerList" class="paper-picker-list">
+          <p class="text-muted small">Loading library…</p>
+        </div>
+      </div>
+
+      <button class="btn btn-primary w-100" id="generateDraftBtn" onclick="generateDraft()">
+        <i class="bi bi-magic me-1"></i>Generate Draft
+        <span id="draftSpinner" class="spinner-border spinner-border-sm ms-1 d-none"></span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Draft output panel -->
+  <div class="col-lg-8">
+    <div class="panel-card h-100">
+      <div class="d-flex align-items-center justify-content-between mb-3">
+        <h5 class="panel-card-title mb-0"><i class="bi bi-file-earmark-richtext me-2"></i>Generated Draft</h5>
+        <div class="d-flex gap-2" id="draftActions" style="display:none!important">
+          <button class="btn btn-sm btn-outline-secondary" onclick="copyDraft()">
+            <i class="bi bi-clipboard me-1"></i>Copy
+          </button>
+          <button class="btn btn-sm btn-outline-secondary" onclick="downloadDraft()">
+            <i class="bi bi-download me-1"></i>Download .txt
+          </button>
+        </div>
+      </div>
+      <div id="draftOutput" class="draft-output-area">
+        <div class="empty-state">
+          <i class="bi bi-file-earmark-text fs-2 text-muted"></i>
+          <p class="mt-2 text-muted">Configure settings and click <strong>Generate Draft</strong> to begin.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let libraryPapers = [];
+let selectedPaperIds = new Set();
+
+function escapeHtml(str) {
+  return str ? String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') : '';
+}
+
+function renderMarkdown(text) {
+  return text
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/^\s*[-•]\s+(.+)$/gm, '<li>$1</li>')
+    .replace(/(<li>[\s\S]*?<\/li>)/g, '<ul>$1</ul>')
+    .replace(/\n{2,}/g, '</p><p>')
+    .replace(/\n/g, '<br>');
+}
+
+async function loadLibraryPapers() {
+  const container = document.getElementById('paperPickerList');
+  container.innerHTML = '<p class="text-muted small">Loading…</p>';
+  try {
+    const resp = await fetch('/api/library');
+    const data = await resp.json();
+    libraryPapers = data.papers || [];
+    if (libraryPapers.length === 0) {
+      container.innerHTML = '<p class="text-muted small">No papers saved. <a href="/dashboard">Search first.</a></p>';
+      return;
+    }
+    container.innerHTML = libraryPapers.map((p, i) => `
+      <div class="paper-picker-item" onclick="togglePaper(${i}, this)">
+        <div class="d-flex align-items-start gap-2">
+          <input type="checkbox" class="form-check-input flex-shrink-0 mt-1" id="pick-${i}" />
+          <div>
+            <div class="paper-picker-title">${escapeHtml(p.title.substring(0,70))}${p.title.length>70?'…':''}</div>
+            <div class="paper-picker-meta">${(p.authors||[]).slice(0,2).map(escapeHtml).join(', ')} ${p.year ? '· ' + p.year : ''}</div>
+          </div>
+        </div>
+      </div>`).join('');
+  } catch(e) {
+    container.innerHTML = '<p class="text-danger small">Failed to load library.</p>';
+  }
+}
+
+function togglePaper(idx, item) {
+  const cb = document.getElementById(`pick-${idx}`);
+  cb.checked = !cb.checked;
+  if (cb.checked) {
+    item.classList.add('selected');
+    selectedPaperIds.add(idx);
+  } else {
+    item.classList.remove('selected');
+    selectedPaperIds.delete(idx);
+  }
+}
+
+let lastDraftText = '';
+
+async function generateDraft() {
+  const topic = document.getElementById('draftTopic').value.trim();
+  const section = document.getElementById('draftSection').value;
+  const instructions = document.getElementById('draftInstructions').value.trim();
+
+  if (!topic) { showToast('Please enter a research topic.', 'warning'); return; }
+
+  const selected = Array.from(selectedPaperIds).map(i => libraryPapers[i]);
+
+  const btn = document.getElementById('generateDraftBtn');
+  const spinner = document.getElementById('draftSpinner');
+  btn.disabled = true; spinner.classList.remove('d-none');
+
+  const outputDiv = document.getElementById('draftOutput');
+  outputDiv.innerHTML = `<div class="text-center py-5"><div class="spinner-border text-primary"></div><p class="mt-2 text-muted">Granite is drafting your ${section.replace('_',' ')} section…</p></div>`;
+
+  try {
+    const resp = await fetch('/api/draft', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ section, topic, papers: selected, instructions }),
+    });
+    const data = await resp.json();
+    if (resp.ok) {
+      lastDraftText = data.draft;
+      outputDiv.innerHTML = `
+        <div class="draft-meta mb-3">
+          <span class="meta-chip"><i class="bi bi-file-earmark-text me-1"></i>${section.replace('_',' ').toUpperCase()}</span>
+          <span class="meta-chip"><i class="bi bi-files me-1"></i>${data.sources_used} source${data.sources_used !== 1 ? 's' : ''}</span>
+        </div>
+        <div class="draft-text-content"><p>${renderMarkdown(escapeHtml(data.draft))}</p></div>`;
+      document.getElementById('draftActions').style.display = '';
+    } else {
+      outputDiv.innerHTML = `<div class="alert alert-danger">${data.error || 'Draft generation failed.'}</div>`;
+    }
+  } catch(e) {
+    outputDiv.innerHTML = '<div class="alert alert-danger">Request failed. Check connection.</div>';
+  }
+  btn.disabled = false; spinner.classList.add('d-none');
+}
+
+function copyDraft() {
+  navigator.clipboard.writeText(lastDraftText).then(() => showToast('Draft copied!', 'success'));
+}
+
+function downloadDraft() {
+  const blob = new Blob([lastDraftText], { type: 'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `draft_${document.getElementById('draftSection').value}.txt`;
+  a.click();
+}
+
+loadLibraryPapers();
+</script>
+{% endblock %}

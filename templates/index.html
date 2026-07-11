@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}ResearchAI — Home{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1 class="page-title">Welcome to <span class="accent">ResearchAI</span></h1>
+  <p class="page-subtitle">Your AI-powered academic research companion, built on IBM Granite.</p>
+</div>
+
+<div class="row g-4 mt-1">
+  <!-- Chat card -->
+  <div class="col-lg-4 col-md-6">
+    <a href="/chat" class="feature-card">
+      <div class="feature-icon chat-icon"><i class="bi bi-chat-dots-fill"></i></div>
+      <h3 class="feature-title">AI Research Chat</h3>
+      <p class="feature-desc">Ask any research question. Granite answers using your saved papers as grounded context (RAG).</p>
+      <span class="feature-cta">Start chatting <i class="bi bi-arrow-right"></i></span>
+    </a>
+  </div>
+  <!-- Search card -->
+  <div class="col-lg-4 col-md-6">
+    <a href="/dashboard" class="feature-card">
+      <div class="feature-icon search-icon"><i class="bi bi-search"></i></div>
+      <h3 class="feature-title">Literature Search</h3>
+      <p class="feature-desc">Search arXiv and Semantic Scholar simultaneously. Save papers and summarize abstracts instantly.</p>
+      <span class="feature-cta">Search papers <i class="bi bi-arrow-right"></i></span>
+    </a>
+  </div>
+  <!-- Library card -->
+  <div class="col-lg-4 col-md-6">
+    <a href="/library" class="feature-card">
+      <div class="feature-icon library-icon"><i class="bi bi-bookmark-fill"></i></div>
+      <h3 class="feature-title">Reference Library</h3>
+      <p class="feature-desc">Manage your saved papers. Export to BibTeX, APA, MLA, or IEEE. Organize by project or tag.</p>
+      <span class="feature-cta">Open library <i class="bi bi-arrow-right"></i></span>
+    </a>
+  </div>
+  <!-- Draft card -->
+  <div class="col-lg-4 col-md-6">
+    <a href="/draft" class="feature-card">
+      <div class="feature-icon draft-icon"><i class="bi bi-file-earmark-text-fill"></i></div>
+      <h3 class="feature-title">Draft Section</h3>
+      <p class="feature-desc">Select saved papers and let Granite draft your Introduction, Related Work, or Methodology section.</p>
+      <span class="feature-cta">Draft now <i class="bi bi-arrow-right"></i></span>
+    </a>
+  </div>
+  <!-- Hypothesis card -->
+  <div class="col-lg-4 col-md-6">
+    <a href="/hypothesis" class="feature-card">
+      <div class="feature-icon hyp-icon"><i class="bi bi-lightbulb-fill"></i></div>
+      <h3 class="feature-title">Hypothesis Lab</h3>
+      <p class="feature-desc">Input a topic or set of papers — Granite identifies research gaps and suggests testable hypotheses.</p>
+      <span class="feature-cta">Explore hypotheses <i class="bi bi-arrow-right"></i></span>
+    </a>
+  </div>
+  <!-- Health card -->
+  <div class="col-lg-4 col-md-6">
+    <div class="feature-card cursor-default">
+      <div class="feature-icon status-icon"><i class="bi bi-activity"></i></div>
+      <h3 class="feature-title">System Status</h3>
+      <p class="feature-desc" id="healthStatus">Checking IBM watsonx.ai connection…</p>
+      <span class="feature-cta" id="healthBadge"><span class="badge badge-checking">Checking…</span></span>
+    </div>
+  </div>
+</div>
+
+<!-- How it works -->
+<div class="section-divider mt-5"></div>
+<h2 class="section-heading mt-4">How It Works</h2>
+<div class="row g-3 mt-1">
+  <div class="col-md-3">
+    <div class="step-card">
+      <div class="step-number">01</div>
+      <h5>Search Literature</h5>
+      <p>Query arXiv and Semantic Scholar for papers on your topic.</p>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="step-card">
+      <div class="step-number">02</div>
+      <h5>Build Your Library</h5>
+      <p>Save papers. They're automatically chunked and indexed in ChromaDB for RAG.</p>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="step-card">
+      <div class="step-number">03</div>
+      <h5>Chat & Summarize</h5>
+      <p>Ask Granite research questions. Answers are grounded in your library.</p>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="step-card">
+      <div class="step-number">04</div>
+      <h5>Draft & Export</h5>
+      <p>Generate paper sections with citations. Export BibTeX for LaTeX or Word.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+fetch('/api/health')
+  .then(r => r.json())
+  .then(data => {
+    const el = document.getElementById('healthStatus');
+    const badge = document.getElementById('healthBadge');
+    if (data.status === 'ok') {
+      el.textContent = 'IBM watsonx.ai connection is active. Granite is ready.';
+      badge.innerHTML = '<span class="badge badge-ok"><i class="bi bi-check-circle-fill me-1"></i>Connected</span>';
+    } else {
+      el.textContent = `Connection issue: ${data.detail || 'Check your .env credentials.'}`;
+      badge.innerHTML = '<span class="badge badge-error"><i class="bi bi-x-circle-fill me-1"></i>Disconnected</span>';
+    }
+  })
+  .catch(() => {
+    document.getElementById('healthStatus').textContent = 'Could not reach the backend.';
+    document.getElementById('healthBadge').innerHTML = '<span class="badge badge-error">Error</span>';
+  });
+</script>
+{% endblock %}
